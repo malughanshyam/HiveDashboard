@@ -18,7 +18,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.*;
 
 public class HiveExecutor {
 	private static String driverName = "org.apache.hive.jdbc.HiveDriver";
@@ -29,6 +28,7 @@ public class HiveExecutor {
 	private String queryFilePath;
 	private Connection con;
 	private Statement stmt;
+	private String jobStatus;
 	private String statusFilePath;
 	private String outputDir ;
 	private String resultFilePath;
@@ -42,6 +42,7 @@ public class HiveExecutor {
 		this.dbName = args[3];
 		this.queryFilePath = args[4];
 		this.outputDir = "./data/"+this.jobID;
+		this.jobStatus = "NOT STARTED";
 		this.resultFilePath = this.outputDir +"/result.txt";
 		this.statusFilePath = this.outputDir +"/status.txt";
 	}
@@ -58,17 +59,19 @@ public class HiveExecutor {
 		
 		hiveExecObj.createOutputDirectory();
 		
-		boolean jobSuccessFlag = hiveExecObj.executeQuery(sql);
+		hiveExecObj.jobStatus = "IN PROGRESS";
+		hiveExecObj.updateStatusFile();
 		
-		if (jobSuccessFlag == true){			
+		hiveExecObj.executeQuery(sql);
+				
+		if ( hiveExecObj.jobStatus == "SUCCESS"){			
 			hiveExecObj.exportResult();
-			hiveExecObj.copyQueryFileToOuputDir();
 		}
 
-		hiveExecObj.updateStatusFile(jobSuccessFlag);
+		hiveExecObj.updateStatusFile();
+		hiveExecObj.copyQueryFileToOuputDir();
 	
 	}
-
 
 	private static void usage() {
 		System.err.println("Usage : java " + HiveExecutor.class.getName()
@@ -99,25 +102,24 @@ public class HiveExecutor {
 		return query;
 	}
 	
-	private boolean executeQuery(String sql)   throws IOException, SQLException {
-		boolean jobSuccessFlag = false;
+	private void executeQuery(String sql)   throws IOException, SQLException {
+		
 		
 		try {
 			System.out.println("JobID : " + this.jobID);
 			System.out.println("Running : " + sql);
 			
 			this.res = stmt.executeQuery(sql);
-			jobSuccessFlag = true;
+			this.jobStatus = "SUCCESS";
 		
 		} catch (Exception e){
 			System.out.println("Job Failed");
 			this.occurredException = e;
-			jobSuccessFlag = false;
+			this.jobStatus = "FAILED";
 		} finally {
 			
 		}
-		return jobSuccessFlag;
-		
+				
 	}
 	
 	private void createOutputDirectory(){
@@ -152,14 +154,10 @@ public class HiveExecutor {
 		
 	}
 
-
-	private void updateStatusFile(boolean jobSuccessFlag) throws FileNotFoundException, UnsupportedEncodingException {
+	private void updateStatusFile() throws FileNotFoundException, UnsupportedEncodingException {
 		PrintWriter writer = new PrintWriter(this.statusFilePath, "UTF-8");
-		if (jobSuccessFlag == true){
-			writer.println("SUCCESS");
-		}
-		else{
-			writer.println("FAILED");
+		writer.println(this.jobStatus);
+		if (this.jobStatus == "FAILED"){
 			this.occurredException.printStackTrace(writer);
 		}
 		writer.close();
